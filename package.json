@@ -1,0 +1,35 @@
+{
+  "name": "node-jsonizer",
+  "version": "1.0.1",
+  "description": "Web content to json.",
+  "homepage": "https://github.com/leolmi/node-jsonizer",
+  "license": "Free",
+  "main": "jsonizer.js",
+  "keywords": [
+    "json",
+    "html",
+    "node",
+    "server",
+    "util"
+  ],
+  "author": {
+    "name": "Leo",
+    "email": "leo.olmi@gmail.com",
+    "url": "http://..."
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leolmi/node-jsonizer.git"
+  },
+  "engines": [
+    "node"
+  ],
+  "files": [
+    "jsonizer.js",
+    "lib/utils.js"
+  ],
+  "dependencies": {
+    "cheerio": "^0.19.0",
+    "lodash": "~2.4.1"
+  }
+}
