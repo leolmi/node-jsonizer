@@ -1,4 +1,6 @@
 # node-jsonizer
+[![Build Status](https://travis-ci.org/leolmi/node-jsonizer.svg)](https://travis-ci.org/leolmi/node-jsonizer)
+
 
 (beta version)
 web to json
