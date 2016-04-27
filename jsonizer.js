@@ -32,7 +32,12 @@ var jsonizer = function() {
     { name:'__EVENTVALIDATION', pattern:'<input.*?name="__EVENTVALIDATION".*?value="(.*?)".*?>' }
   ];
 
-
+  var ResultData = function() {};
+  ResultData.prototype = {
+    type: 'none',
+    data: null,
+    content: ''
+  };
 
   /**
    *
@@ -230,39 +235,6 @@ var jsonizer = function() {
     }
   }
 
-
-
-  //function parseHtmlTable(html, pattern, cb) {
-  //  try {
-  //    var table = [];
-  //    var $ = cheerio.load(html);
-  //    var res = eval(pattern);
-  //    res.find('tr').each(function () {
-  //      var row = {};
-  //      $(this).children().each(function (i, e) {
-  //        row['C' + i] = $(e).text();
-  //      });
-  //      table.push(row);
-  //    });
-  //    return cb(null, table);
-  //  }
-  //  catch(err) {
-  //    return cb(err);
-  //  }
-  //}
-  //
-  //function parse(content, options, cb){
-  //  cb = cb || noop;
-  //  options = options || {};
-  //  var type = options.type || 'none';
-  //  switch (type){
-  //    //PARSER HTML
-  //    case 'htmltable': return parseHtmlTable(content, options.pattern, cb);
-  //    //DEFAULT: restituisce il testo così come è stato recuperato
-  //    default: return cb(null, content);
-  //  }
-  //}
-
   /**
    * valorizza il target secondo il tipo e se il valore esiste
    * @param {object} sequence
@@ -382,15 +354,23 @@ var jsonizer = function() {
 
       checkCookies(r, options);
 
-      if (i >= sequence.items.length - 1)
-        return parser.parse(c, parseroptions, cb);
-
-      if (c) {
-        checkKeepers(sequence.keepers, c);
-        evalSequenceJS(item.postjs, sequence, item, c);
+      if (i >= sequence.items.length - 1) {
+        parser.parse(c, parseroptions, function(err, table) {
+          var result = new ResultData();
+          result.type = parseroptions.type;
+          result.data = table;
+          result.content = c;
+          return cb(err, result);
+        });
       }
+      else {
+        if (c) {
+          checkKeepers(sequence.keepers, c);
+          evalSequenceJS(item.postjs, sequence, item, c);
+        }
 
-      evalSequence(sequence, cb, parseroptions, options, i+1);
+        evalSequence(sequence, cb, parseroptions, options, i + 1);
+      }
     });
   }
 
