@@ -119,15 +119,12 @@ var jsonizer = function() {
     var protocol = options.https ? 'https://' : 'http://';
 
     var req_opt = {
+      host: process.env.PROXY_HOST || options.host,
+      port: process.env.PROXY_PORT || options.port,
       path: protocol + options.host + options.path,
       method: options.method,
       headers: options.headers
     };
-
-    if (process.env.PROXY_URL && process.env.PROXY_PORT) {
-      req_opt.host = process.env.PROXY_URL;
-      req_opt.port = process.env.PROXY_PORT;
-    }
 
     if (options.verbose) console.log('['+title+']-REQ OPT: ' + JSON.stringify(req_opt, null, 2));
 
