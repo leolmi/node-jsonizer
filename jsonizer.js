@@ -15,7 +15,6 @@ var _ = require('lodash'),
   https = require('https'),
   http = require('http'),
   querystring = require('querystring'),
-  //cheerio = require("cheerio"),
   zlib = require("zlib");
 
 
@@ -123,8 +122,6 @@ var jsonizer = function() {
       method: options.method,
       headers: options.headers
     };
-
-    console.log('['+title+']-ENV: ' + JSON.stringify(process.env));
 
     if (process.env.PROXY_URL && process.env.PROXY_PORT) {
       req_opt.host = process.env.PROXY_URL;
@@ -320,7 +317,7 @@ var jsonizer = function() {
    * @param {number} [i]
    */
   function evalSequence(sequence, cb, parseroptions, options, i) {
-    options = options || { headers: {}, verbose:true };
+    options = options || { headers: {} };
     //il merging con il prototipo garantisce la correttezza della classe
     options = _.merge(options, opt_prototype);
     i = i || 0;

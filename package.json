@@ -3,7 +3,7 @@
   "version": "1.0.4",
   "description": "Web content to json.",
   "homepage": "https://github.com/leolmi/node-jsonizer",
-  "license": "Free",
+  "license": "MIT",
   "main": "jsonizer.js",
   "keywords": [
     "json",
@@ -13,7 +13,7 @@
     "util"
   ],
   "author": {
-    "name": "Leo",
+    "name": "Leonardo Olmi <leo.olmi@gmail.com>",
     "email": "leo.olmi@gmail.com",
     "url": "http://..."
   },
