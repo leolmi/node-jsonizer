@@ -305,6 +305,15 @@ var jsonizer = function() {
     }
   }
 
+  function validateHeaders(options, item, data) {
+    if (data && data.length)
+      options.headers['content-length'] = data.length;
+    else
+      delete options.headers['content-length'];
+
+    if (!_.has(options.headers, 'host'))
+      options.headers['host'] = options.host;
+  }
 
   /**
    * Effettua una catena di chiamate sequenziali
@@ -338,7 +347,7 @@ var jsonizer = function() {
     evalSequenceJS(item.prejs, sequence, item);
 
     var data = getData(item.data);
-    options.headers['content-length'] = data ? data.length : 0;
+    validateHeaders(options, item, data);
 
     if (options.verbose) console.log('['+item.title+']-REQUEST BODY: '+data);
     doRequest(item.title, options, data, undefined, function (err, o, r, c) {
