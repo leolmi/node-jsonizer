@@ -23,7 +23,7 @@ var jsonizer = function() {
   function noop(){}
 
   var opt_prototype = {
-    headers: []
+    headers: {}
   };
 
   var _keepers = [
