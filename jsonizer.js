@@ -6,7 +6,7 @@
  * Use, reproduction, distribution, and modification of this code is subject to the terms and
  * conditions of the MIT license, available at http://www.opensource.org/licenses/mit-license.php
  *
- * Project: https://github.com/leolmi/jsonizer
+ * Project: https://github.com/leolmi/node-jsonizer
  */
 
 var _ = require('lodash'),
@@ -359,10 +359,10 @@ var jsonizer = function() {
       checkCookies(r, options);
 
       if (i >= sequence.items.length - 1) {
-        parser.parse(c, parseroptions, function(err, table) {
+        parser.parse(c, parseroptions, function(err, data) {
           var result = new ResultData();
           result.type = parseroptions.type;
-          result.data = table;
+          result.data = data;
           result.content = c;
           return cb(err, result);
         });
@@ -400,7 +400,11 @@ var jsonizer = function() {
       getkeeper: function(name) { return _.find(_keepers, {'name':name}); }
     },
     parser: {
-      parseHtmlTable: parser.parseHtmlTable
+      types: parser.types,
+      parse: parser.parse,
+      parseHtmlTable: parser.parseHtmlTable,
+      parseJsonContent: parser.parseJsonContent,
+      parseCustomContent: parser.parseCustomContent
     },
     eval: evalSequenceStart
   };
