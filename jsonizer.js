@@ -17,6 +17,8 @@ var _ = require('lodash'),
   querystring = require('querystring'),
   zlib = require("zlib");
 
+var PREFIX_JS = 'JS=';
+var PREFIX_RGX = 'RGX=';
 
 'use strict';
 var jsonizer = function() {
@@ -39,52 +41,18 @@ var jsonizer = function() {
     content: ''
   };
 
-  /**
-   *
-   * @param {[]} o
-   * @param {boolean,function} [encode]
-   * @returns {*}
-   */
-  function getObjectData(o, encode) {
-    var eo = {};
-    if (typeof encode==='function') {
-      for (var p in o)
-        eo[p] = encode(o[p]);
+  function getData(sequence, data) {
+    if (data && _.isArray(data) && data.length > 0) {
+      var eo = {};
+      data.forEach(function (item) {
+        if (_.isFunction(item.value.indexOf) && item.value.indexOf(PREFIX_JS) == 0) {
+          var logic = item.value.substr(PREFIX_JS.length);
+          eo[item.name] = evalJSLogic(logic, null, sequence.jsutil);
+        } else {
+          eo[item.name] = item.value;
+        }
+      });
       return querystring.stringify(eo);
-    } else if (encode) {
-      for (var p in o)
-        eo[p] = u.encodeToEsa(o[p]);
-      return querystring.stringify(eo);
-    }
-    else {
-      return querystring.stringify(o);
-    }
-  }
-
-  function getArrayData(a, encode) {
-    if (!a || !a.length) return undefined;
-    var eo = {};
-    if (typeof encode==='function') {
-      a.forEach(function(i){ eo[i.name] = encode(i.value); });
-    } else if (encode) {
-      a.forEach(function(i){ eo[i.name] = u.encodeToEsa(i.value); });
-    } else {
-      a.forEach(function(i){ eo[i.name] = i.value; });
-    }
-    return querystring.stringify(eo);
-  }
-
-  function getData(data, encode) {
-    if (data) {
-      if (_.isString(data))
-        return data;
-      if (_.isArray(data)) {
-        if (data.length <= 0)
-          return undefined;
-        return getArrayData(data, encode);
-      }
-      if (_.isObject(data))
-        return getObjectData(data, encode);
     }
     return undefined;
   }
@@ -119,12 +87,16 @@ var jsonizer = function() {
     var protocol = options.https ? 'https://' : 'http://';
 
     var req_opt = {
-      host: process.env.PROXY_HOST || options.host,
-      port: process.env.PROXY_PORT || options.port,
       path: protocol + options.host + options.path,
       method: options.method,
-      headers: options.headers
+      headers: options.headers,
+      host: options.host
     };
+
+    if (process.env.PROXY_HOST) {
+      req_opt.host = process.env.PROXY_HOST;
+      req_opt.port = process.env.PROXY_PORT;
+    }
 
     if (options.verbose) console.log('['+title+']-REQ OPT: ' + JSON.stringify(req_opt, null, 2));
 
@@ -216,67 +188,6 @@ var jsonizer = function() {
       options.headers = {};
   }
 
-  function checkKeepers(keepers, content) {
-    if (keepers && keepers.length && content){
-      keepers.forEach(function(k){
-        if (k.mode && k.mode=='onetime' && k.value) {
-          //skip keeper
-        } else if (k.content) {
-          var rgx = new RegExp(k.content, 'g');
-          var v = rgx.exec(content);
-          if (v && v.length) k.value = v[1];
-        }
-      });
-    }
-  }
-
-  /**
-   * valorizza il target secondo il tipo e se il valore esiste
-   * @param {object} sequence
-   * @param {object} item
-   * @param {object} sequencejs
-   */
-  function setTarget(sequence, item, sequencejs) {
-    if (sequencejs.value) {
-      if (sequencejs.ttype=='parameter') {
-        var p = _.find(sequence.parameters, function(p) { return p.name==sequencejs.target; });
-        if (p) p.value = sequencejs.value;
-      }
-      else {
-        if (!item.data)
-          item.data = {};
-        item.data[sequencejs.name] = sequencejs.value;
-      }
-    }
-  }
-  function evalKeepers(sequence, item){
-    if (sequence.keepers && sequence.keepers.length){
-      sequence.keepers.forEach(function(k){
-        setTarget(sequence, item, k);
-      });
-    }
-  }
-
-  /**
-   * Esegue le azioni sul content
-   * @param actions
-   * @param sequence
-   * @param item
-   * @param [content]
-   */
-  function evalSequenceJS(actions, sequence, item, content){
-    if (actions && actions.length){
-      content = content || item.data;
-      actions.forEach(function(a){
-        if (a.content) {
-          var f = new Function('content', 'params', a.content);
-          var value = f(content, sequence.parameters);
-          setTarget(sequence, item, value);
-        }
-      });
-    }
-  }
-
   function getUrl(o, item) {
     return o.host + item.path;
   }
@@ -287,24 +198,38 @@ var jsonizer = function() {
     return url;
   }
 
+  /**
+   * Preleva i valori degli headers e del referer
+   * @param o
+   * @param item
+   * @param sequence
+   * @param index
+   */
   function keep(o, item, sequence, index) {
-    item.headers.forEach(function(h){
+    item.headers.forEach(function (h) {
       o.headers[h.name.toLowerCase()] = h.value;
     });
-    u.keep(o, item, ['method','path'], true);
+    u.keep(o, item, ['method', 'path'], true);
     if (item.host) o.host = checkHost(item.host);
 
     //item precedente
-    var preitem = (index>0) ? sequence.items[index-1] : null;
+    var preitem = (index > 0) ? sequence.items[index - 1] : null;
 
     if (item.referer) {
-      if (item.referer.toLowerCase()=='auto'){
-        o.headers.referer = (preitem) ? getUrl(o, preitem) : undefined;
+      if (item.referer.toLowerCase() == 'auto') {
+        if (preitem)
+          o.headers.referer = getUrl(o, preitem);
       }
       else o.headers.referer = item.referer;
     }
   }
 
+  /**
+   * verifica gli headers
+   * @param options
+   * @param item
+   * @param data
+   */
   function validateHeaders(options, item, data) {
     if (data && data.length)
       options.headers['content-length'] = data.length;
@@ -313,6 +238,169 @@ var jsonizer = function() {
 
     if (!_.has(options.headers, 'host'))
       options.headers['host'] = options.host;
+  }
+
+  function getItem(sequence, options, index, cb) {
+    if (sequence && sequence.items && sequence.items.length > index) {
+      while (sequence.items.length > index && sequence.items[index].skip) {
+        if (options.verbose) console.log('['+sequence.items[index].title+']- n°'+index+1+' SKIPPED');
+        index++;
+      }
+      if (sequence.items.length <= index)
+        return cb(new Error('Wrong sequence!'));
+      cb(null, sequence.items[index], index);
+    } else {
+      cb(new Error('No available items!'));
+    }
+  }
+
+  function isLast(sequence, index) {
+    while (index < sequence.items.length && sequence.items[index].skip) {
+      index = index + 1;
+    }
+    return index + 1 >= sequence.items.length;
+  }
+
+  function replaceSingleData(obj, prp, rgx, value) {
+    if (!obj) return;
+    if (_.isArray(obj)) {
+      var pn = prp || 'value';
+      obj.forEach(function (item) {
+        if (item[pn] && _.isFunction(item[pn].replace))
+          item[pn] = item[pn].replace(rgx, value);
+      });
+    } else {
+      var driver = (prp) ? prp : _.keys(obj);
+      driver.forEach(function (k) {
+        if (_.isFunction(obj[k].replace))
+          obj[k] = obj[k].replace(rgx, value);
+      });
+    }
+  }
+
+  /**
+   * Scrive i valori dei parametri nei replacers
+   * @param sequence
+   * @param options
+   * @param data
+   */
+  function replaceData(sequence, options, data) {
+    var seq_prop = ['host','path'];
+    sequence.parameters.forEach(function(p){
+      var rgx = new RegExp('\\['+ p.name+'\\]', 'gmi');
+      //properties
+      replaceSingleData(options, seq_prop, rgx, p.value);
+      //data
+      replaceSingleData(data, null, rgx, p.value);
+      //headers
+      replaceSingleData(options.headers, null, rgx, p.value);
+    });
+  }
+
+  function isValid(r) {
+    return r != null && r != undefined;
+  }
+
+  function evalJSLogic(logic, arg, util) {
+    if (util)
+      logic = util + '\n\n' + logic;
+    var f = new Function('data', '_', logic);
+    return f(arg, _, util);
+  }
+
+  function evalRgxLogic(logic, arg) {
+    var rgx = new RegExp(logic);
+    return rgx.exec(arg);
+  }
+
+  function evalKeeperLogic(keeper, arg, util) {
+    if (!keeper.logic)
+      return arg;
+    switch(keeper.logicType) {
+      case 'regex':
+        return evalRgxLogic(keeper.logic, arg);
+      case 'javascript':
+        return evalJSLogic(keeper.logic, arg, util);
+      default:
+        return arg;
+    }
+  }
+
+  function getCookie(cookie, name) {
+    if (cookie) {
+      var cookies = cookie.split(';');
+      var pos = 0;
+      cookie = _.find(cookies, function (c) {
+        pos = c.indexOf(name + '=');
+        return pos > -1;
+      });
+      if (cookie)
+        return cookie.substr(pos + 1);
+    }
+  }
+
+  function evalHeadersLogic(sequence, options) {
+    _.keys(options.headers).forEach(function (k) {
+      var value = options.headers[k] || '';
+      if (_.isFunction(value.indexOf) && value.indexOf(PREFIX_JS) == 0) {
+        var logic = value.substr(PREFIX_JS.length);
+        options.headers[k] = evalJSLogic(logic, null, sequence.jsutil);
+      }
+    });
+  }
+
+  /**
+   * Esegue il singolo estrattore
+   * @param sequence
+   * @param options
+   * @param content
+   */
+  function evalKeeper(sequence, keeper, options, content) {
+    var target = _.find(sequence.parameters, function(p){
+      return p.id == keeper.target;
+    });
+    if (!target) return;
+    var value = null;
+    switch(keeper.sourceType) {
+      case 'body':
+        value = evalKeeperLogic(keeper, content, sequence.jsutil);
+        break;
+      case 'cookies':
+        var cookie = options.headers['cookie'] || options.headers['Cookie'];
+        if (cookie) {
+          if (keeper.name)
+            cookie = getCookie(cookie, name);
+          value = evalKeeperLogic(keeper, cookie, sequence.jsutil);
+        }
+        break;
+      case 'headers':
+        if (keeper.name) {
+          var header = options.headers[name];
+          if (header)
+            value = evalKeeperLogic(keeper, options.headers[k], sequence.jsutil);
+        } else {
+          value = _.find(_.keys(options.headers), function (k) {
+            return isValid(evalKeeperLogic(keeper, options.headers[k], sequence.jsutil));
+          });
+        }
+        break;
+    }
+    if (value)
+      target.value = value;
+  }
+
+  /**
+   * Esegue gli estrattori a livello di item
+   * @param item
+   * @param content
+   * @param options
+   */
+  function evalKeepers(sequence, item, options, content) {
+    if (item.keepers.length) {
+      item.keepers.forEach(function(k){
+        evalKeeper(sequence, k, options, content);
+      });
+    }
   }
 
   /**
@@ -324,57 +412,52 @@ var jsonizer = function() {
    * @param {number} [i]
    */
   function evalSequence(sequence, cb, parseroptions, options, i) {
-    options = options || { headers: {} };
-    //il merging con il prototipo garantisce la correttezza della classe
+    options = options || {};
     options = _.merge(options, opt_prototype);
     i = i || 0;
 
     console.log('OPTIONS: '+JSON.stringify(options));
-    if (!sequence || !sequence.items || sequence.items.length <= i)
-      return cb(new Error('Sequence is empty or undefined!'));
-    if (sequence.items.length < i + 1)
-      return cb(new Error('Wrong sequence!'));
-    var item = sequence.items[i];
+    getItem(sequence, options, i, function(err, item, index){
+      if (err) return cb(err);
 
-    if (options.verbose) console.log('['+item.title+']-OPTIONS: (before check): ' + JSON.stringify(options));
-    check(options);
-    if (options.verbose) console.log('['+item.title+']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
-    keep(options, item, sequence, i);
-    if (options.verbose) console.log('['+item.title+']-OPTIONS: (after keep & before keepers)' + JSON.stringify(options));
-    evalKeepers(sequence, item);
-    if (options.verbose) console.log('['+item.title+']-OPTIONS: (after keepers)' + JSON.stringify(options));
+      options.https = sequence.SSL;
+      if (options.verbose) console.log('['+item.title+']-OPTIONS: (before check): ' + JSON.stringify(options));
+      check(options);
+      if (options.verbose) console.log('['+item.title+']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
+      keep(options, item, sequence, index);
+      if (options.verbose) console.log('['+item.title+']-OPTIONS: (after keep)' + JSON.stringify(options));
 
-    evalSequenceJS(item.prejs, sequence, item);
+      if (options.verbose) console.log('['+item.title+']-PRE DATA OBJECT: '+JSON.stringify(item.data));
+      replaceData(sequence, options, item.data);
+      var data = getData(sequence, item.data);
+      validateHeaders(options, item, data);
+      evalHeadersLogic(sequence, options);
 
-    var data = getData(item.data);
-    validateHeaders(options, item, data);
+      if (options.verbose) console.log('['+item.title+']-REQUEST BODY: '+data);
+      doRequest(item.title, options, data, undefined, function (err, o, r, c) {
+        if (err)
+          return cb(err);
 
-    if (options.verbose) console.log('['+item.title+']-REQUEST BODY: '+data);
-    doRequest(item.title, options, data, undefined, function (err, o, r, c) {
-      if (err)
-        return cb(err);
+        if (options.verbose) console.log('['+item.title+'] - RICHIESTA EFFETTUATA SENZA ERRORI step='+index);
 
-      if (options.verbose) console.log('['+(i+1)+' '+item.title+'] - RICHIESTA EFFETTUATA CON SUCCESSO, CONTENT: '+c);
-
-      checkCookies(r, options);
-
-      if (i >= sequence.items.length - 1) {
-        parser.parse(c, parseroptions, function(err, data) {
-          var result = new ResultData();
-          result.type = parseroptions.type;
-          result.data = data;
-          result.content = c;
-          return cb(err, result);
-        });
-      }
-      else {
-        if (c) {
-          checkKeepers(sequence.keepers, c);
-          evalSequenceJS(item.postjs, sequence, item, c);
+        if (isLast(sequence, index)) {
+          if (options.verbose) console.log('['+item.title+'] - LAST ITEM ('+index+') START PARSER...');
+          parser.parse(c, parseroptions, function(err, data) {
+            if (err) return cb(err);
+            if (options.verbose) console.log('['+item.title+'] - PARSER RESULT ('+index+') START PARSER...');
+            var result = new ResultData();
+            result.type = parseroptions.type;
+            result.data = data;
+            result.content = c;
+            return cb(err, result);
+          });
         }
-
-        evalSequence(sequence, cb, parseroptions, options, i + 1);
-      }
+        else {
+          if (options.verbose) console.log('['+item.title+'] - NEXT ITEM ('+index+' -> '+(index+1)+'?)');
+          evalKeepers(sequence, item, options, c);
+          evalSequence(sequence, cb, parseroptions, options, index + 1);
+        }
+      });
     });
   }
 
