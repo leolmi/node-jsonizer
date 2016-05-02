@@ -93,7 +93,7 @@ var jsonizer = function() {
       host: options.host
     };
 
-    if (process.env.PROXY_HOST) {
+    if (options.proxy && process.env.PROXY_HOST) {
       req_opt.host = process.env.PROXY_HOST;
       req_opt.port = process.env.PROXY_PORT;
     }
@@ -106,22 +106,22 @@ var jsonizer = function() {
         headers:res.headers
       };
       if (options.verbose) console.log('['+title+']-RESULTS: ' + JSON.stringify(result, null, 2));
-
+      checkCookies(res, options);
 
       var newpath = res.headers.location;
       if ((res.statusCode.toString()=='302' || res.statusCode.toString()=='301') && newpath) {
         skipped = true;
-        if (options.verbose) console.log('new location:'+newpath);
-        var path = getRedirectPath(options ,newpath);
-        if (path==options.path){
+        if (options.verbose) console.log('new location:' + newpath);
+        var path = getRedirectPath(options, newpath);
+        if (path == options.path) {
           console.log('Location is the same!');
           return;
         }
         options.path = path;
-        if (options.verbose) console.log('Redir new path:'+options.path);
+        if (options.verbose) console.log('Redir new path:' + options.path);
         checkCookies(res, options);
 
-        doRequest('redir - '+title, options, null, null, cb);
+        doRequest('redir - ' + title, options, null, null, cb);
       }
 
       if (target) {
@@ -188,8 +188,9 @@ var jsonizer = function() {
       options.headers = {};
   }
 
-  function getUrl(o, item) {
-    return o.host + item.path;
+  function getUrl(options, item) {
+    var protocol = options.https ? 'https://' : 'http://';
+    return protocol + options.host + item.path;
   }
 
   function checkHost(url){
@@ -205,22 +206,29 @@ var jsonizer = function() {
    * @param sequence
    * @param index
    */
-  function keep(o, item, sequence, index) {
+  function keep(options, item, sequence, index) {
     item.headers.forEach(function (h) {
-      o.headers[h.name.toLowerCase()] = h.value;
+      options.headers[h.name.toLowerCase()] = h.value;
     });
-    u.keep(o, item, ['method', 'path'], true);
-    if (item.host) o.host = checkHost(item.host);
+    u.keep(options, item, ['method', 'path'], true);
+    if (item.host) options.host = checkHost(item.host);
 
     //item precedente
     var preitem = (index > 0) ? sequence.items[index - 1] : null;
 
     if (item.referer) {
-      if (item.referer.toLowerCase() == 'auto') {
+      var ref = item.referer.toLowerCase();
+      // se 'auto' recupera l'indirizzo dello step precedente
+      if (ref == 'auto') {
         if (preitem)
-          o.headers.referer = getUrl(o, preitem);
-      }
-      else o.headers.referer = item.referer;
+          options.headers.referer = getUrl(options, preitem);
+      // se inizia per '=' si aspetta un indice dello step di referer
+      } else if (ref.indexOf('=') == 0) {
+        var i = parseInt(ref.substr(1));
+        if (i > -1 && i < sequence.items.length)
+          options.headers.referer = getUrl(options, sequence.items[i]);
+      // altrimenti è esplicito
+      } else options.headers.referer = item.referer;
     }
   }
 
@@ -421,6 +429,7 @@ var jsonizer = function() {
       if (err) return cb(err);
 
       options.https = sequence.SSL;
+      options.proxy = sequence.proxy;
       if (options.verbose) console.log('['+item.title+']-OPTIONS: (before check): ' + JSON.stringify(options));
       check(options);
       if (options.verbose) console.log('['+item.title+']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
