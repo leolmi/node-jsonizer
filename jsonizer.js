@@ -424,7 +424,7 @@ var jsonizer = function() {
     options = _.merge(options, opt_prototype);
     i = i || 0;
 
-    console.log('OPTIONS: '+JSON.stringify(options));
+    if (options.verbose) console.log('OPTIONS: '+JSON.stringify(options));
     getItem(sequence, options, i, function(err, item, index){
       if (err) return cb(err);
 
