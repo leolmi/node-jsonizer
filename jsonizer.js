@@ -59,8 +59,16 @@ var jsonizer = function() {
 
 
   function getRedirectPath(opt, nxt) {
-    if (nxt.indexOf(opt.host)<0)
-      return opt.host + nxt;
+    var prev = opt.path.split('/');
+    var next = nxt.split('/');
+    if (prev.length) prev.pop();
+    while(next.length && next[0]=='..') {
+      next.splice(0,1);
+      prev.pop();
+    }
+
+    prev.push.apply(prev, next);
+    nxt = prev.join('/');
     return nxt;
   }
 
