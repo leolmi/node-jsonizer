@@ -8,17 +8,17 @@ web to json
 ...soon
 
 
-###Documentation:
+### Documentation:
 (under construction)
 
 
-###Download
+### Install
 
 ```
 $ npm i node-jsonizer
 ``` 
 
-###Import
+### Use
 
 ```javascript
 const jsonizer = require('node-jsonizer');
