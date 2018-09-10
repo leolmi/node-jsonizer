@@ -15,11 +15,11 @@ web to json
 ###Download
 
 ```
-$ npm install node-jsonizer
+$ npm i node-jsonizer
 ``` 
 
 ###Import
 
 ```javascript
-var jsonizer = require('node-jsonizer')
+const jsonizer = require('node-jsonizer');
 ```
