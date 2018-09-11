@@ -5,3 +5,4 @@ public
 .idea
 .settings
 npm-debug.log
+package-lock.json

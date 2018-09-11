@@ -9,7 +9,7 @@
  * Project: https://github.com/leolmi/node-jsonizer
  */
 
-var _ = require('lodash'),
+const _ = require('lodash'),
   u = require('./lib/utils'),
   parser = require('./lib/parser'),
   https = require('https'),
@@ -17,27 +17,29 @@ var _ = require('lodash'),
   querystring = require('querystring'),
   zlib = require("zlib");
 
-var PREFIX_JS = 'JS=';
-var PREFIX_RGX = 'RGX=';
-var multipart_boundary_prefix = '---------------------------';
-var multipart_body_header = 'Content-Disposition: form-data; name=';
+const PREFIX_JS = 'JS=';
+const PREFIX_RGX = 'RGX=';
+const multipart_boundary_prefix = '---------------------------';
+const multipart_body_header = 'Content-Disposition: form-data; name=';
 
 'use strict';
-var jsonizer = function() {
-  function noop(){}
+const jsonizer = function() {
+  function noop() {
+  }
 
-  var opt_prototype = {
+  const opt_prototype = {
     timeout: 150000,
     headers: {}
   };
 
-  var _keepers = [
-    { name:'__VIEWSTATE', pattern:'<input.*?name="__VIEWSTATE".*?value="(.*?)".*?>'},
-    { name:'__VIEWSTATEGENERATOR', pattern:'<input.*?name="__VIEWSTATEGENERATOR".*?value="(.*?)".*?>' },
-    { name:'__EVENTVALIDATION', pattern:'<input.*?name="__EVENTVALIDATION".*?value="(.*?)".*?>' }
+  const _keepers = [
+    {name: '__VIEWSTATE', pattern: '<input.*?name="__VIEWSTATE".*?value="(.*?)".*?>'},
+    {name: '__VIEWSTATEGENERATOR', pattern: '<input.*?name="__VIEWSTATEGENERATOR".*?value="(.*?)".*?>'},
+    {name: '__EVENTVALIDATION', pattern: '<input.*?name="__EVENTVALIDATION".*?value="(.*?)".*?>'}
   ];
 
-  var ResultData = function() {};
+  const ResultData = function () {};
+
   ResultData.prototype = {
     type: 'none',
     data: null,
@@ -46,10 +48,10 @@ var jsonizer = function() {
 
   function getData(sequence, data) {
     if (data && _.isArray(data) && data.length > 0) {
-      var eo = {};
-      data.forEach(function (item) {
-        if (_.isFunction(item.value.indexOf) && item.value.indexOf(PREFIX_JS) == 0) {
-          var logic = item.value.substr(PREFIX_JS.length);
+      let eo = {};
+      data.forEach((item) => {
+        if (_.isFunction(item.value.indexOf) && item.value.indexOf(PREFIX_JS) === 0) {
+          const logic = item.value.substr(PREFIX_JS.length);
           eo[item.name] = evalJSLogic(logic, null, sequence.jsutil);
         } else {
           eo[item.name] = item.value;
@@ -61,38 +63,36 @@ var jsonizer = function() {
   }
 
   function getMultipartData(opt, data) {
-    var body = undefined;
+    let body = undefined;
     if (data && _.isArray(data) && data.length > 0) {
-      var id = u.uuid();
-      var boundary = multipart_boundary_prefix + id;
+      const id = u.uuid();
+      const boundary = multipart_boundary_prefix + id;
       body = '';
-      data.forEach(function (item) {
-        body += '--' + boundary + '\r\n' + multipart_body_header + '"' + item.name + '"\r\n\r\n' + item.value + '\r\n';
-      });
+      data.forEach((item) => body += '--' + boundary + '\r\n' + multipart_body_header + '"' + item.name + '"\r\n\r\n' + item.value + '\r\n');
       body += '--' + boundary + '--';
 
       if (opt.headers['content-type'])
-        opt.headers['content-type']+=' boundary='+boundary;
+        opt.headers['content-type'] += ' boundary=' + boundary;
     }
     return body;
   }
 
   function getRedirectPath(opt, nxt) {
-    var prev = opt.path.split('/');
-    var next = nxt.split('/');
-    if (opt.verbose) console.log('[REDIRECT]: prv=' + opt.path + '   prev='+JSON.stringify(prev));
-    if (opt.verbose) console.log('[REDIRECT]: nxt=' + nxt + '   next='+JSON.stringify(next));
+    const prev = opt.path.split('/');
+    const next = nxt.split('/');
+    if (opt.verbose) console.log('[REDIRECT]: prv=' + opt.path + '   prev=' + JSON.stringify(prev));
+    if (opt.verbose) console.log('[REDIRECT]: nxt=' + nxt + '   next=' + JSON.stringify(next));
 
     if (prev.length) prev.pop();
-    while(next.length && next[0]=='..') {
-      next.splice(0,1);
+    while (next.length && next[0] === '..') {
+      next.splice(0, 1);
       prev.pop();
     }
 
     prev.push.apply(prev, next);
 
     nxt = prev.join('/');
-    if (opt.verbose) console.log('[REDIRECT]: res=' + nxt + '   result='+JSON.stringify(prev));
+    if (opt.verbose) console.log('[REDIRECT]: res=' + nxt + '   result=' + JSON.stringify(prev));
     return nxt;
   }
 
@@ -110,15 +110,15 @@ var jsonizer = function() {
    * @param cb
    */
   function doRequest(title, options, data, target, cb) {
-    var skipped = false;
-    var download = false;
+    let skipped = false;
+    let download = false;
     cb = cb || noop;
-    if (options.verbose) console.log('['+title+']-OPTIONS: ' + JSON.stringify(options, null, 2));
+    if (options.verbose) console.log('[' + title + ']-OPTIONS: ' + JSON.stringify(options, null, 2));
     options.agent = false;
-    var proto = options.https ? https : http;
-    var protocol = options.https ? 'https://' : 'http://';
+    const proto = options.https ? https : http;
+    const protocol = options.https ? 'https://' : 'http://';
 
-    var req_opt = {
+    const req_opt = {
       path: protocol + options.host + options.path,
       method: options.method,
       headers: options.headers,
@@ -130,27 +130,27 @@ var jsonizer = function() {
       req_opt.port = process.env.PROXY_PORT;
     }
 
-    if (options.verbose) console.log('['+title+']-REQ OPT: ' + JSON.stringify(req_opt, null, 2));
+    if (options.verbose) console.log('[' + title + ']-REQ OPT: ' + JSON.stringify(req_opt, null, 2));
 
-    var req = proto.request(req_opt, function(res) {
-      var result = {
-        code:res.statusCode,
-        headers:res.headers
+    const req = proto.request(req_opt, (res) => {
+      const result = {
+        code: res.statusCode,
+        headers: res.headers
       };
-      if (options.verbose) console.log('['+title+']-RESULTS: ' + JSON.stringify(result, null, 2));
+      if (options.verbose) console.log('[' + title + ']-RESULTS: ' + JSON.stringify(result, null, 2));
       checkCookies(res, options);
 
-      var newpath = res.headers.location;
-      if ((res.statusCode.toString()=='302' || res.statusCode.toString()=='301') && newpath) {
+      const newpath = res.headers.location;
+      if ((res.statusCode.toString() === '302' || res.statusCode.toString() === '301') && newpath) {
         skipped = true;
         if (options.verbose) console.log('new location:' + newpath);
-        var path = getRedirectPath(options, newpath);
-        if (path == options.path) {
+        const path = getRedirectPath(options, newpath);
+        if (path === options.path) {
           console.warn('Location is the same!');
           return;
         }
-        if (!path || path.split(options.host).length>2) {
-          var msg = 'WARINNG: Wrong path: ' + path;
+        if (!path || path.split(options.host).length > 2) {
+          const msg = 'WARINNG: Wrong path: ' + path;
           console.error(msg);
           return;
         }
@@ -165,37 +165,33 @@ var jsonizer = function() {
         download = true;
         res.setEncoding('binary');
         res.pipe(target);
-        target.on('finish', function() {
+        target.on('finish', () => {
           if (options.verbose) console.log('Write file ended!');
-          target.close(cb(null, options,result));
+          target.close(cb(null, options, result));
         });
       }
 
-      var chunks = [];
-      var content = '';
+      const chunks = [];
+      let content = '';
 
-      res.on('data', function (chunk) {
-        var type = _.isString(chunk) ? 'stringa' : 'altro';
+      res.on('data', (chunk) => {
+        const type = _.isString(chunk) ? 'stringa' : 'altro';
         if (options.verbose) console.log('[' + title + ']-download data (' + type + '): ' + chunk);
         content += chunk;
         chunks.push(chunk);
       });
 
-      res.on('end', function () {
-        if (options.verbose) console.log('['+title+']-Fine richiesta!   skipped='+skipped+'   download='+download+'  target='+(target ? 'si' : 'no'));
+      res.on('end', () => {
+        if (options.verbose) console.log('[' + title + ']-Fine richiesta!   skipped=' + skipped + '   download=' + download + '  target=' + (target ? 'si' : 'no'));
         if (!skipped && !target && !download) {
           options.headers = _.merge(options.headers, req.headers);
-          var buffer = Buffer.concat(chunks);
+          const buffer = Buffer.concat(chunks);
 
-          var encoding = res.headers['content-encoding'];
-          if (encoding == 'gzip') {
-            zlib.gunzip(buffer, function(err, decoded) {
-              cb(err, options, result, decoded && decoded.toString());
-            });
-          } else if (encoding == 'deflate') {
-            zlib.inflate(buffer, function(err, decoded) {
-              cb(err, options, result, decoded && decoded.toString());
-            })
+          const encoding = res.headers['content-encoding'];
+          if (encoding === 'gzip') {
+            zlib.gunzip(buffer, (err, decoded) => cb(err, options, result, decoded && decoded.toString()));
+          } else if (encoding === 'deflate') {
+            zlib.inflate(buffer, (err, decoded) => cb(err, options, result, decoded && decoded.toString()));
           } else {
             cb(null, options, result, buffer.toString());
           }
@@ -203,18 +199,18 @@ var jsonizer = function() {
       });
     });
 
-    req.on('error', function(e) {
-      if (options.verbose) console.log('['+title+']-problem with request: ' + JSON.stringify(e));
+    req.on('error', function (e) {
+      if (options.verbose) console.log('[' + title + ']-problem with request: ' + JSON.stringify(e));
       cb(e);
     });
 
     if (data) {
-      if (options.verbose) console.log('['+title+']-send data: '+data);
+      if (options.verbose) console.log('[' + title + ']-send data: ' + data);
       req.write(data);
     }
 
     if (options.timeout) {
-      req.setTimeout(options.timeout, function() {
+      req.setTimeout(options.timeout, function () {
         cb('request timed out');
       });
     }
@@ -232,45 +228,43 @@ var jsonizer = function() {
   }
 
   function getUrl(options, item) {
-    var protocol = options.https ? 'https://' : 'http://';
+    const protocol = options.https ? 'https://' : 'http://';
     return protocol + options.host + item.path;
   }
 
-  function checkHost(url){
-    url = url.replace('http://','');
-    url = url.replace('https://','');
+  function checkHost(url) {
+    url = url.replace('http://', '');
+    url = url.replace('https://', '');
     return url;
   }
 
   /**
    * Preleva i valori degli headers e del referer
-   * @param o
+   * @param options
    * @param item
    * @param sequence
    * @param index
    */
   function keep(options, item, sequence, index) {
-    item.headers.forEach(function (h) {
-      options.headers[h.name.toLowerCase()] = h.value;
-    });
+    item.headers.forEach((h) => options.headers[h.name.toLowerCase()] = h.value);
     u.keep(options, item, ['method', 'path'], true);
     if (item.host) options.host = checkHost(item.host);
 
     //item precedente
-    var preitem = (index > 0) ? sequence.items[index - 1] : null;
+    const preitem = (index > 0) ? sequence.items[index - 1] : null;
 
     if (item.referer) {
-      var ref = item.referer.toLowerCase();
+      const ref = item.referer.toLowerCase();
       // se 'auto' recupera l'indirizzo dello step precedente
-      if (ref == 'auto') {
+      if (ref === 'auto') {
         if (preitem)
           options.headers.referer = getUrl(options, preitem);
-      // se inizia per '=' si aspetta un indice dello step di referer
-      } else if (ref.indexOf('=') == 0) {
-        var i = parseInt(ref.substr(1));
+        // se inizia per '=' si aspetta un indice dello step di referer
+      } else if (ref.indexOf('=') === 0) {
+        const i = parseInt(ref.substr(1));
         if (i > -1 && i < sequence.items.length)
           options.headers.referer = getUrl(options, sequence.items[i]);
-      // altrimenti è esplicito
+        // altrimenti è esplicito
       } else options.headers.referer = item.referer;
     }
   }
@@ -282,10 +276,11 @@ var jsonizer = function() {
    * @param data
    */
   function validateHeaders(options, item, data) {
-    if (data && data.length)
+    if (data && data.length) {
       options.headers['content-length'] = data.length;
-    else
+    } else {
       delete options.headers['content-length'];
+    }
 
     if (!_.has(options.headers, 'host'))
       options.headers['host'] = options.host;
@@ -294,7 +289,7 @@ var jsonizer = function() {
   function getItem(sequence, options, index, cb) {
     if (sequence && sequence.items && sequence.items.length > index) {
       while (sequence.items.length > index && sequence.items[index].skip) {
-        if (options.verbose) console.log('['+sequence.items[index].title+']- n°'+index+1+' SKIPPED');
+        if (options.verbose) console.log('[' + sequence.items[index].title + ']- n°' + index + 1 + ' SKIPPED');
         index++;
       }
       if (sequence.items.length <= index)
@@ -315,14 +310,14 @@ var jsonizer = function() {
   function replaceSingleData(obj, prp, rgx, value) {
     if (!obj) return;
     if (_.isArray(obj)) {
-      var pn = prp || 'value';
-      obj.forEach(function (item) {
+      const pn = prp || 'value';
+      obj.forEach((item) => {
         if (item[pn] && _.isFunction(item[pn].replace))
           item[pn] = item[pn].replace(rgx, value);
       });
     } else {
-      var driver = (prp) ? prp : _.keys(obj);
-      driver.forEach(function (k) {
+      const driver = (prp) ? prp : _.keys(obj);
+      driver.forEach((k) => {
         if (_.isFunction(obj[k].replace))
           obj[k] = obj[k].replace(rgx, value);
       });
@@ -336,9 +331,9 @@ var jsonizer = function() {
    * @param data
    */
   function replaceData(sequence, options, data) {
-    var seq_prop = ['host','path'];
-    sequence.parameters.forEach(function(p){
-      var rgx = new RegExp('\\['+ p.name+'\\]', 'gmi');
+    const seq_prop = ['host', 'path'];
+    sequence.parameters.forEach((p) => {
+      const rgx = new RegExp('\\[' + p.name + '\\]', 'gmi');
       //properties
       replaceSingleData(options, seq_prop, rgx, p.value);
       //data
@@ -349,25 +344,24 @@ var jsonizer = function() {
   }
 
   function isValid(r) {
-    return r != null && r != undefined;
+    return r != null && r !== undefined;
   }
 
   function evalJSLogic(logic, arg, util) {
-    if (util)
-      logic = util + '\n\n' + logic;
-    var f = new Function('data', '_', logic);
+    if (util) logic = util + '\n\n' + logic;
+    const f = new Function('data', '_', logic);
     return f(arg, _, util);
   }
 
   function evalRgxLogic(logic, arg) {
-    var rgx = new RegExp(logic);
+    const rgx = new RegExp(logic);
     return rgx.exec(arg);
   }
 
   function evalKeeperLogic(keeper, arg, util) {
     if (!keeper.logic)
       return arg;
-    switch(keeper.logicType) {
+    switch (keeper.logicType) {
       case 'regex':
         return evalRgxLogic(keeper.logic, arg);
       case 'javascript':
@@ -379,9 +373,9 @@ var jsonizer = function() {
 
   function getCookie(cookie, name) {
     if (cookie) {
-      var cookies = cookie.split(';');
-      var pos = 0;
-      cookie = _.find(cookies, function (c) {
+      const cookies = cookie.split(';');
+      let pos = 0;
+      cookie = _.find(cookies, (c) => {
         pos = c.indexOf(name + '=');
         return pos > -1;
       });
@@ -391,10 +385,10 @@ var jsonizer = function() {
   }
 
   function evalHeadersLogic(sequence, options) {
-    _.keys(options.headers).forEach(function (k) {
-      var value = options.headers[k] || '';
-      if (_.isFunction(value.indexOf) && value.indexOf(PREFIX_JS) == 0) {
-        var logic = value.substr(PREFIX_JS.length);
+    _.keys(options.headers).forEach((k) => {
+      const value = options.headers[k] || '';
+      if (_.isFunction(value.indexOf) && value.indexOf(PREFIX_JS) === 0) {
+        const logic = value.substr(PREFIX_JS.length);
         options.headers[k] = evalJSLogic(logic, null, sequence.jsutil);
       }
     });
@@ -403,36 +397,31 @@ var jsonizer = function() {
   /**
    * Esegue il singolo estrattore
    * @param sequence
+   * @param keeper
    * @param options
    * @param content
    */
   function evalKeeper(sequence, keeper, options, content) {
-    var target = _.find(sequence.parameters, function(p){
-      return p.id == keeper.target;
-    });
+    const target = _.find(sequence.parameters, (p) => p.id === keeper.target);
     if (!target) return;
-    var value = null;
-    switch(keeper.sourceType) {
+    let value = null;
+    switch (keeper.sourceType) {
       case 'body':
         value = evalKeeperLogic(keeper, content, sequence.jsutil);
         break;
       case 'cookies':
-        var cookie = options.headers['cookie'] || options.headers['Cookie'];
+        let cookie = options.headers['cookie'] || options.headers['Cookie'];
         if (cookie) {
-          if (keeper.name)
-            cookie = getCookie(cookie, name);
+          if (keeper.name) cookie = getCookie(cookie, name);
           value = evalKeeperLogic(keeper, cookie, sequence.jsutil);
         }
         break;
       case 'headers':
         if (keeper.name) {
-          var header = options.headers[name];
-          if (header)
-            value = evalKeeperLogic(keeper, options.headers[k], sequence.jsutil);
+          let header = options.headers[name];
+          if (header) value = evalKeeperLogic(keeper, options.headers[k], sequence.jsutil);
         } else {
-          value = _.find(_.keys(options.headers), function (k) {
-            return isValid(evalKeeperLogic(keeper, options.headers[k], sequence.jsutil));
-          });
+          value = _.find(_.keys(options.headers), (k) => isValid(evalKeeperLogic(keeper, options.headers[k], sequence.jsutil)));
         }
         break;
     }
@@ -442,13 +431,14 @@ var jsonizer = function() {
 
   /**
    * Esegue gli estrattori a livello di item
+   * @param sequence
    * @param item
-   * @param content
    * @param options
+   * @param content
    */
   function evalKeepers(sequence, item, options, content) {
     if (item.keepers.length) {
-      item.keepers.forEach(function(k){
+      item.keepers.forEach(function (k) {
         evalKeeper(sequence, k, options, content);
       });
     }
@@ -467,22 +457,22 @@ var jsonizer = function() {
     options = _.merge(options, opt_prototype);
     i = i || 0;
 
-    if (options.verbose) console.log('OPTIONS: '+JSON.stringify(options));
-    getItem(sequence, options, i, function(err, item, index){
+    if (options.verbose) console.log('OPTIONS: ' + JSON.stringify(options));
+    getItem(sequence, options, i, function (err, item, index) {
       if (err) return cb(err);
 
       options.https = sequence.SSL;
       options.proxy = sequence.proxy;
-      if (options.verbose) console.log('['+item.title+']-OPTIONS: (before check): ' + JSON.stringify(options));
+      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (before check): ' + JSON.stringify(options));
       check(options);
-      if (options.verbose) console.log('['+item.title+']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
+      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
       keep(options, item, sequence, index);
-      if (options.verbose) console.log('['+item.title+']-OPTIONS: (after keep)' + JSON.stringify(options));
+      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (after keep)' + JSON.stringify(options));
 
-      if (options.verbose) console.log('['+item.title+']-PRE DATA OBJECT: '+JSON.stringify(item.data));
+      if (options.verbose) console.log('[' + item.title + ']-PRE DATA OBJECT: ' + JSON.stringify(item.data));
       replaceData(sequence, options, item.data);
-      var data = undefined;
-      switch(item.datatype) {
+      let data = undefined;
+      switch (item.datatype) {
         case 'multipart':
           data = getMultipartData(options, item.data);
           break;
@@ -493,27 +483,25 @@ var jsonizer = function() {
       validateHeaders(options, item, data);
       evalHeadersLogic(sequence, options);
 
-      if (options.verbose) console.log('['+item.title+']-REQUEST BODY: '+data);
-      doRequest(item.title, options, data, undefined, function (err, o, r, c) {
-        if (err)
-          return cb(err);
+      if (options.verbose) console.log('[' + item.title + ']-REQUEST BODY: ' + data);
+      doRequest(item.title, options, data, undefined, (err, o, r, c) => {
+        if (err) return cb(err);
 
-        if (options.verbose) console.log('['+item.title+'] - RICHIESTA EFFETTUATA SENZA ERRORI step='+index);
+        if (options.verbose) console.log('[' + item.title + '] - RICHIESTA EFFETTUATA SENZA ERRORI step=' + index);
 
         if (isLast(sequence, index)) {
-          if (options.verbose) console.log('['+item.title+'] - LAST ITEM ('+index+') START PARSER...');
-          parser.parse(c, parseroptions, function(err, data) {
+          if (options.verbose) console.log('[' + item.title + '] - LAST ITEM (' + index + ') START PARSER...');
+          parser.parse(c, parseroptions, (err, data) => {
             if (err) return cb(err);
-            if (options.verbose) console.log('['+item.title+'] - PARSER RESULT ('+index+') START PARSER...');
-            var result = new ResultData();
+            if (options.verbose) console.log('[' + item.title + '] - PARSER RESULT (' + index + ') START PARSER...');
+            const result = new ResultData();
             result.type = parseroptions.type;
             result.data = data;
             result.content = c;
             return cb(err, result);
           });
-        }
-        else {
-          if (options.verbose) console.log('['+item.title+'] - NEXT ITEM ('+index+' -> '+(index+1)+'?)');
+        } else {
+          if (options.verbose) console.log('[' + item.title + '] - NEXT ITEM (' + index + ' -> ' + (index + 1) + '?)');
           evalKeepers(sequence, item, options, c);
           evalSequence(sequence, cb, parseroptions, options, index + 1);
         }
@@ -533,14 +521,14 @@ var jsonizer = function() {
     return evalSequence(sequence, cb, parseroptions, options, 0);
   }
 
-  return  {
+  return {
     util: {
-      ok: function(res, obj) {return res.json(200, obj);},
-      created: function(res, obj) {return res.json(201, obj);},
-      deleted: function(res) {return res.json(204);},
-      notfound: function(res) {return res.send(404); },
-      error: function(res, err) { return res.send(500, err); },
-      getkeeper: function(name) { return _.find(_keepers, {'name':name}); }
+      ok: function (res, obj) {return res.json(200, obj);},
+      created: function (res, obj) {return res.json(201, obj);},
+      deleted: function (res) {return res.json(204);},
+      notfound: function (res) {return res.send(404);},
+      error: function (res, err) {return res.send(500, err);},
+      getkeeper: function (name) {return _.find(_keepers, {'name': name});}
     },
     parser: {
       types: parser.types,

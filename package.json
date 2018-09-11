@@ -1,6 +1,6 @@
 {
   "name": "node-jsonizer",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Web content to json.",
   "homepage": "https://github.com/leolmi/node-jsonizer",
   "license": "MIT",
@@ -13,17 +13,17 @@
     "util"
   ],
   "author": {
-    "name": "Leonardo Olmi <leo.olmi@gmail.com>",
+    "name": "Leo",
     "email": "leo.olmi@gmail.com",
     "url": "http://..."
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/leolmi/node-jsonizer.git"
+    "url": "https://github.com/leolmi/node-jsonizer"
   },
-  "engines": [
-    "node"
-  ],
+  "engines": {
+    "node": ">=0.10.0"
+  },
   "files": [
     "jsonizer.js",
     "lib/utils.js",
@@ -31,7 +31,7 @@
     "lib/options.js"
   ],
   "dependencies": {
-    "cheerio": "^0.19.0",
+    "cheerio": "^0.22.0",
     "lodash": "^4.17.5"
   }
 }
