@@ -1,6 +1,6 @@
 {
   "name": "node-jsonizer",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Web content to json.",
   "homepage": "https://github.com/leolmi/node-jsonizer",
   "license": "MIT",
