@@ -501,7 +501,7 @@ const jsonizer = function() {
             result.type = po.type;
             result.data = data;
             result.content = c;
-            return cb(err, result);
+            return cb(null, result);
           });
         } else {
           if (wo.verbose) console.log('[' + item.title + '] - NEXT ITEM (' + index + ' -> ' + (index + 1) + '?)');
