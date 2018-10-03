@@ -1,6 +1,6 @@
 {
   "name": "node-jsonizer",
-  "version": "1.0.18",
+  "version": "1.1.0",
   "description": "Web content to json.",
   "homepage": "https://github.com/leolmi/node-jsonizer",
   "license": "MIT",
@@ -28,10 +28,11 @@
     "jsonizer.js",
     "lib/utils.js",
     "lib/parser.js",
-    "lib/options.js"
+    "lib/proto.js"
   ],
   "dependencies": {
     "cheerio": "^0.22.0",
+    "fast-xml-parser": "^3.12.5",
     "lodash": "^4.17.5"
   }
 }

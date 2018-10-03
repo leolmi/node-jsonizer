@@ -11,21 +11,42 @@
 
 const _ = require('lodash'),
   u = require('./lib/utils'),
+  proto = require('./lib/proto'),
   parser = require('./lib/parser'),
   https = require('https'),
   http = require('http'),
+  URL = require('url'),
   querystring = require('querystring'),
   zlib = require("zlib");
 
-const PREFIX_JS = 'JS=';
-const PREFIX_RGX = 'RGX=';
-const multipart_boundary_prefix = '---------------------------';
-const multipart_body_header = 'Content-Disposition: form-data; name=';
+const CONSTANTS = {
+  headers: {
+    defaults: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Connection": "keep-alive",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+      "Accept-Language": "it,en;q=0.9,it-IT;q=0.8,en-US;q=0.7",
+      "Accept-Encoding": "gzip, deflate, br",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36"
+    },
+    contentTpes: {
+      json: "application/json",
+      text: "text/html; charset=utf-8"
+    }
+  },
+  dataType: {
+    multipart: 'multipart'
+  },
+  prefixes: {
+    js: 'JS=',
+    rgx: 'RGX='
+  },
+  multipart_boundary_prefix: '---------------------------',
+  multipart_body_header: 'Content-Disposition: form-data; name='
+};
 
 'use strict';
 const jsonizer = function() {
-  function noop() {
-  }
 
   const opt_prototype = {
     timeout: 150000,
@@ -38,21 +59,29 @@ const jsonizer = function() {
     {name: '__EVENTVALIDATION', pattern: '<input.*?name="__EVENTVALIDATION".*?value="(.*?)".*?>'}
   ];
 
-  const ResultData = function () {};
 
-  ResultData.prototype = {
-    type: 'none',
-    data: null,
-    content: ''
+  const _eval = {
+    javascript(logic, arg, util) {
+      if (util) logic = util + '\n\n' + logic;
+      const f = new Function('data', '_', logic);
+      return f(arg, _, util);
+    },
+    regex(logic, arg) {
+      const rgx = new RegExp(logic);
+      return rgx.exec(arg);
+    },
+    bypass(logic, arg) {
+      return arg;
+    }
   };
 
-  function getData(sequence, data) {
+  function _getData(sequence, data) {
     if (data && _.isArray(data) && data.length > 0) {
       let eo = {};
       data.forEach((item) => {
-        if (_.isFunction(item.value.indexOf) && item.value.indexOf(PREFIX_JS) === 0) {
-          const logic = item.value.substr(PREFIX_JS.length);
-          eo[item.name] = evalJSLogic(logic, null, sequence.jsutil);
+        if (_.isFunction(item.value.indexOf) && item.value.indexOf(CONSTANTS.prefixes.js) === 0) {
+          const logic = item.value.substr(CONSTANTS.prefixes.js.length);
+          eo[item.name] = _eval.javascript(logic, null, sequence.jsutil);
         } else {
           eo[item.name] = item.value;
         }
@@ -62,26 +91,35 @@ const jsonizer = function() {
     return undefined;
   }
 
-  function getMultipartData(opt, data) {
+  function _getMultipartData(o, data) {
     let body = undefined;
     if (data && _.isArray(data) && data.length > 0) {
       const id = u.uuid();
-      const boundary = multipart_boundary_prefix + id;
+      const boundary = CONSTANTS.multipart_boundary_prefix + id;
       body = '';
-      data.forEach((item) => body += '--' + boundary + '\r\n' + multipart_body_header + '"' + item.name + '"\r\n\r\n' + item.value + '\r\n');
+      data.forEach((item) => body += '--' + boundary + '\r\n' + CONSTANTS.multipart_body_header + '"' + item.name + '"\r\n\r\n' + item.value + '\r\n');
       body += '--' + boundary + '--';
 
-      if (opt.headers['content-type'])
-        opt.headers['content-type'] += ' boundary=' + boundary;
+      if (o.headers['content-type'])
+        o.headers['content-type'] += ' boundary=' + boundary;
     }
     return body;
   }
 
-  function getRedirectPath(opt, nxt) {
-    const prev = opt.path.split('/');
+  function _getItemData(sequence, item, wo) {
+    switch (item.datatype) {
+      case CONSTANTS.dataType.multipart:
+        return _getMultipartData(wo, item.data);
+      default:
+        return _getData(sequence, item.data);
+    }
+  }
+
+  function _getRedirectPath(o, nxt) {
+    const prev = o.path.split('/');
     const next = nxt.split('/');
-    if (opt.verbose) console.log('[REDIRECT]: prv=' + opt.path + '   prev=' + JSON.stringify(prev));
-    if (opt.verbose) console.log('[REDIRECT]: nxt=' + nxt + '   next=' + JSON.stringify(next));
+    if (o.verbose) console.log('[REDIRECT]: prv=' + o.path + '   prev=' + JSON.stringify(prev));
+    if (o.verbose) console.log('[REDIRECT]: nxt=' + nxt + '   next=' + JSON.stringify(next));
 
     if (prev.length) prev.pop();
     while (next.length && next[0] === '..') {
@@ -92,11 +130,11 @@ const jsonizer = function() {
     prev.push.apply(prev, next);
 
     nxt = prev.join('/');
-    if (opt.verbose) console.log('[REDIRECT]: res=' + nxt + '   result=' + JSON.stringify(prev));
+    if (o.verbose) console.log('[REDIRECT]: res=' + nxt + '   result=' + JSON.stringify(prev));
     return nxt;
   }
 
-  function checkCookies(res, o) {
+  function _checkCookies(res, o) {
     if (_.has(res.headers, 'set-cookie'))
       o.headers.cookie = res.headers['set-cookie'];
   }
@@ -109,13 +147,13 @@ const jsonizer = function() {
    * @param target
    * @param cb
    */
-  function doRequest(title, options, data, target, cb) {
+  function _doRequest(title, options, data, target, cb) {
     let skipped = false;
     let download = false;
-    cb = cb || noop;
+    cb = cb || _.noop;
     if (options.verbose) console.log('[' + title + ']-OPTIONS: ' + JSON.stringify(options, null, 2));
     options.agent = false;
-    const proto = options.https ? https : http;
+    let handler = options.https ? https : http;
     const protocol = options.https ? 'https://' : 'http://';
 
     const req_opt = {
@@ -125,26 +163,33 @@ const jsonizer = function() {
       host: options.host
     };
 
-    if (options.proxy && process.env.PROXY_HOST) {
-      req_opt.host = process.env.PROXY_HOST;
-      req_opt.port = process.env.PROXY_PORT;
+
+    if (options.proxy) {
+      const prt_name = options.https ? 'HTTPS_PROXY' : 'HTTP_PROXY';
+      const proxy_env = process.env.JSONIZER_PROXY || process.env[prt_name];
+      if (proxy_env) {
+        const proxy = URL.parse(proxy_env);
+        req_opt.host = proxy.hostname;
+        req_opt.port = proxy.port;
+        handler = ((proxy.protocol || '').indexOf('https') === 0) ? https : http;
+      }
     }
 
     if (options.verbose) console.log('[' + title + ']-REQ OPT: ' + JSON.stringify(req_opt, null, 2));
 
-    const req = proto.request(req_opt, (res) => {
+    const req = handler.request(req_opt, (res) => {
       const result = {
         code: res.statusCode,
         headers: res.headers
       };
       if (options.verbose) console.log('[' + title + ']-RESULTS: ' + JSON.stringify(result, null, 2));
-      checkCookies(res, options);
+      _checkCookies(res, options);
 
       const newpath = res.headers.location;
       if ((res.statusCode.toString() === '302' || res.statusCode.toString() === '301') && newpath) {
         skipped = true;
         if (options.verbose) console.log('new location:' + newpath);
-        const path = getRedirectPath(options, newpath);
+        const path = _getRedirectPath(options, newpath);
         if (path === options.path) {
           console.warn('Location is the same!');
           return;
@@ -156,9 +201,9 @@ const jsonizer = function() {
         }
         options.path = path;
         if (options.verbose) console.log('Redir new path:' + options.path);
-        checkCookies(res, options);
+        _checkCookies(res, options);
 
-        doRequest('redir - ' + title, options, null, null, cb);
+        _doRequest('redir - ' + title, options, null, null, cb);
       }
 
       if (target) {
@@ -218,23 +263,13 @@ const jsonizer = function() {
     req.end();
   }
 
-  /**
-   * Valida la classe delle opzioni
-   * @param options
-   */
-  function check(options) {
-    if (!_.has(options, 'headers'))
-      options.headers = {};
-  }
-
-  function getUrl(options, item) {
+  function _getUrl(options, item) {
     const protocol = options.https ? 'https://' : 'http://';
-    return protocol + options.host + item.path;
+    return u.checkUrl(protocol, options.host, item.path);
   }
 
-  function checkHost(url) {
-    url = url.replace('http://', '');
-    url = url.replace('https://', '');
+  function _checkHost(url) {
+    url = url.replace(/http(s?):\/\//gm, '');
     return url;
   }
 
@@ -245,10 +280,10 @@ const jsonizer = function() {
    * @param sequence
    * @param index
    */
-  function keep(options, item, sequence, index) {
+  function _keep(options, item, sequence, index) {
     item.headers.forEach((h) => options.headers[h.name.toLowerCase()] = h.value);
     u.keep(options, item, ['method', 'path'], true);
-    if (item.host) options.host = checkHost(item.host);
+    if (item.host) options.host = _checkHost(item.host);
 
     //item precedente
     const preitem = (index > 0) ? sequence.items[index - 1] : null;
@@ -258,12 +293,12 @@ const jsonizer = function() {
       // se 'auto' recupera l'indirizzo dello step precedente
       if (ref === 'auto') {
         if (preitem)
-          options.headers.referer = getUrl(options, preitem);
+          options.headers.referer = _getUrl(options, preitem);
         // se inizia per '=' si aspetta un indice dello step di referer
       } else if (ref.indexOf('=') === 0) {
         const i = parseInt(ref.substr(1));
         if (i > -1 && i < sequence.items.length)
-          options.headers.referer = getUrl(options, sequence.items[i]);
+          options.headers.referer = _getUrl(options, sequence.items[i]);
         // altrimenti è esplicito
       } else options.headers.referer = item.referer;
     }
@@ -271,23 +306,23 @@ const jsonizer = function() {
 
   /**
    * verifica gli headers
-   * @param options
+   * @param o
    * @param item
    * @param data
    */
-  function validateHeaders(options, item, data) {
+  function _validateHeaders(o, item, data) {
     if (data && data.length) {
-      options.headers['content-length'] = data.length;
+      o.headers['content-length'] = data.length;
     } else {
-      delete options.headers['content-length'];
+      delete o.headers['content-length'];
     }
 
-    if (!_.has(options.headers, 'host'))
-      options.headers['host'] = options.host;
+    if (!_.has(o.headers, 'host'))
+      o.headers['host'] = o.host;
   }
 
-  function getItem(sequence, options, index, cb) {
-    if (sequence && sequence.items && sequence.items.length > index) {
+  function _getItem(sequence, options, index, cb) {
+    if (((sequence || {}).items || []).length > index) {
       while (sequence.items.length > index && sequence.items[index].skip) {
         if (options.verbose) console.log('[' + sequence.items[index].title + ']- n°' + index + 1 + ' SKIPPED');
         index++;
@@ -300,22 +335,21 @@ const jsonizer = function() {
     }
   }
 
-  function isLast(sequence, index) {
+  function _isLast(sequence, index) {
     while (index < sequence.items.length && sequence.items[index].skip) {
       index = index + 1;
     }
     return index + 1 >= sequence.items.length;
   }
 
-  function replaceSingleData(obj, prp, rgx, value) {
-    if (!obj) return;
+  function _replaceSingleData(obj, prp, rgx, value) {
     if (_.isArray(obj)) {
       const pn = prp || 'value';
       obj.forEach((item) => {
         if (item[pn] && _.isFunction(item[pn].replace))
           item[pn] = item[pn].replace(rgx, value);
       });
-    } else {
+    } else if (_.isObject(obj)) {
       const driver = (prp) ? prp : _.keys(obj);
       driver.forEach((k) => {
         if (_.isFunction(obj[k].replace))
@@ -325,21 +359,21 @@ const jsonizer = function() {
   }
 
   /**
-   * Scrive i valori dei parametri nei replacers
+   * Scrive i valori dei parametri nei replacers [bookmark]
    * @param sequence
    * @param options
    * @param data
    */
-  function replaceData(sequence, options, data) {
+  function _replaceData(sequence, options, data) {
     const seq_prop = ['host', 'path'];
     sequence.parameters.forEach((p) => {
       const rgx = new RegExp('\\[' + p.name + '\\]', 'gmi');
       //properties
-      replaceSingleData(options, seq_prop, rgx, p.value);
+      _replaceSingleData(options, seq_prop, rgx, p.value);
       //data
-      replaceSingleData(data, null, rgx, p.value);
+      _replaceSingleData(data, null, rgx, p.value);
       //headers
-      replaceSingleData(options.headers, null, rgx, p.value);
+      _replaceSingleData(options.headers, null, rgx, p.value);
     });
   }
 
@@ -347,31 +381,12 @@ const jsonizer = function() {
     return r != null && r !== undefined;
   }
 
-  function evalJSLogic(logic, arg, util) {
-    if (util) logic = util + '\n\n' + logic;
-    const f = new Function('data', '_', logic);
-    return f(arg, _, util);
+
+  function _evalKeeperLogic(keeper, arg, util) {
+    return (keeper||{}).logic ? (_eval[keeper.logicType]||_eval.bypass)(keeper.logic, arg, util) : arg;
   }
 
-  function evalRgxLogic(logic, arg) {
-    const rgx = new RegExp(logic);
-    return rgx.exec(arg);
-  }
-
-  function evalKeeperLogic(keeper, arg, util) {
-    if (!keeper.logic)
-      return arg;
-    switch (keeper.logicType) {
-      case 'regex':
-        return evalRgxLogic(keeper.logic, arg);
-      case 'javascript':
-        return evalJSLogic(keeper.logic, arg, util);
-      default:
-        return arg;
-    }
-  }
-
-  function getCookie(cookie, name) {
+  function _getCookie(cookie, name) {
     if (cookie) {
       const cookies = cookie.split(';');
       let pos = 0;
@@ -384,12 +399,12 @@ const jsonizer = function() {
     }
   }
 
-  function evalHeadersLogic(sequence, options) {
-    _.keys(options.headers).forEach((k) => {
-      const value = options.headers[k] || '';
-      if (_.isFunction(value.indexOf) && value.indexOf(PREFIX_JS) === 0) {
-        const logic = value.substr(PREFIX_JS.length);
-        options.headers[k] = evalJSLogic(logic, null, sequence.jsutil);
+  function _evalHeadersLogic(sequence, o) {
+    _.keys(o.headers).forEach((k) => {
+      const value = o.headers[k] || '';
+      if (_.isFunction(value.indexOf) && value.indexOf(CONSTANTS.prefixes.js) === 0) {
+        const logic = value.substr(CONSTANTS.prefixes.js.length);
+        o.headers[k] = _eval.javascript(logic, null, sequence.jsutil);
       }
     });
   }
@@ -401,27 +416,27 @@ const jsonizer = function() {
    * @param options
    * @param content
    */
-  function evalKeeper(sequence, keeper, options, content) {
+  function _evalKeeper(sequence, keeper, options, content) {
     const target = _.find(sequence.parameters, (p) => p.id === keeper.target);
     if (!target) return;
     let value = null;
     switch (keeper.sourceType) {
       case 'body':
-        value = evalKeeperLogic(keeper, content, sequence.jsutil);
+        value = _evalKeeperLogic(keeper, content, sequence.jsutil);
         break;
       case 'cookies':
         let cookie = options.headers['cookie'] || options.headers['Cookie'];
         if (cookie) {
-          if (keeper.name) cookie = getCookie(cookie, name);
-          value = evalKeeperLogic(keeper, cookie, sequence.jsutil);
+          if (keeper.name) cookie = _getCookie(cookie, name);
+          value = _evalKeeperLogic(keeper, cookie, sequence.jsutil);
         }
         break;
       case 'headers':
         if (keeper.name) {
           let header = options.headers[name];
-          if (header) value = evalKeeperLogic(keeper, options.headers[k], sequence.jsutil);
+          if (header) value = _evalKeeperLogic(keeper, options.headers[k], sequence.jsutil);
         } else {
-          value = _.find(_.keys(options.headers), (k) => isValid(evalKeeperLogic(keeper, options.headers[k], sequence.jsutil)));
+          value = _.find(_.keys(options.headers), (k) => isValid(_evalKeeperLogic(keeper, options.headers[k], sequence.jsutil)));
         }
         break;
     }
@@ -436,11 +451,9 @@ const jsonizer = function() {
    * @param options
    * @param content
    */
-  function evalKeepers(sequence, item, options, content) {
+  function _evalKeepers(sequence, item, options, content) {
     if (item.keepers.length) {
-      item.keepers.forEach(function (k) {
-        evalKeeper(sequence, k, options, content);
-      });
+      item.keepers.forEach((k) => _evalKeeper(sequence, k, options, content));
     }
   }
 
@@ -448,62 +461,52 @@ const jsonizer = function() {
    * Effettua una catena di chiamate sequenziali
    * @param sequence
    * @param {function} cb  //cb(err, content)
-   * @param {object} [parseroptions]
-   * @param {object} [options]
+   * @param {object} [po]
+   * @param {object} [wo]
    * @param {number} [i]
    */
-  function evalSequence(sequence, cb, parseroptions, options, i) {
-    options = options || {};
-    options = _.merge(options, opt_prototype);
+  function _evalSequence(sequence, cb, po, wo, i) {
+    wo = _.merge(wo, opt_prototype);
     i = i || 0;
 
-    if (options.verbose) console.log('OPTIONS: ' + JSON.stringify(options));
-    getItem(sequence, options, i, function (err, item, index) {
+    if (wo.verbose) console.log('OPTIONS: ' + JSON.stringify(wo));
+    _getItem(sequence, wo, i, function (err, item, index) {
       if (err) return cb(err);
 
-      options.https = sequence.SSL;
-      options.proxy = sequence.proxy;
-      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (before check): ' + JSON.stringify(options));
-      check(options);
-      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (after check & before keep)' + JSON.stringify(options));
-      keep(options, item, sequence, index);
-      if (options.verbose) console.log('[' + item.title + ']-OPTIONS: (after keep)' + JSON.stringify(options));
+      wo.https = sequence.SSL;
+      wo.proxy = sequence.proxy;
+      if (wo.verbose) console.log('[' + item.title + ']-OPTIONS: (before keep)' + JSON.stringify(wo));
+      _keep(wo, item, sequence, index);
+      if (wo.verbose) console.log('[' + item.title + ']-OPTIONS: (after keep)' + JSON.stringify(wo));
 
-      if (options.verbose) console.log('[' + item.title + ']-PRE DATA OBJECT: ' + JSON.stringify(item.data));
-      replaceData(sequence, options, item.data);
-      let data = undefined;
-      switch (item.datatype) {
-        case 'multipart':
-          data = getMultipartData(options, item.data);
-          break;
-        default:
-          data = getData(sequence, item.data);
-          break;
-      }
-      validateHeaders(options, item, data);
-      evalHeadersLogic(sequence, options);
+      if (wo.verbose) console.log('[' + item.title + ']-PRE DATA OBJECT: ' + JSON.stringify(item.data));
+      _replaceData(sequence, wo, item.data);
 
-      if (options.verbose) console.log('[' + item.title + ']-REQUEST BODY: ' + data);
-      doRequest(item.title, options, data, undefined, (err, o, r, c) => {
+      const data = _getItemData(sequence, item, wo);
+      _validateHeaders(wo, item, data);
+      _evalHeadersLogic(sequence, wo);
+
+      if (wo.verbose) console.log('[' + item.title + ']-REQUEST BODY: ' + data);
+      _doRequest(item.title, wo, data, undefined, (err, o, r, c) => {
         if (err) return cb(err);
 
-        if (options.verbose) console.log('[' + item.title + '] - RICHIESTA EFFETTUATA SENZA ERRORI step=' + index);
+        if (wo.verbose) console.log('[' + item.title + '] - RICHIESTA EFFETTUATA SENZA ERRORI step=' + index);
 
-        if (isLast(sequence, index)) {
-          if (options.verbose) console.log('[' + item.title + '] - LAST ITEM (' + index + ') START PARSER...');
-          parser.parse(c, parseroptions, (err, data) => {
+        if (_isLast(sequence, index)) {
+          if (wo.verbose) console.log('[' + item.title + '] - LAST ITEM (' + index + ') START PARSER...');
+          parser.parse(c, po, (err, data) => {
             if (err) return cb(err);
-            if (options.verbose) console.log('[' + item.title + '] - PARSER RESULT (' + index + ') START PARSER...');
-            const result = new ResultData();
-            result.type = parseroptions.type;
+            if (wo.verbose) console.log('[' + item.title + '] - PARSER RESULT (' + index + ') START PARSER...');
+            const result = proto.resultData();
+            result.type = po.type;
             result.data = data;
             result.content = c;
             return cb(err, result);
           });
         } else {
-          if (options.verbose) console.log('[' + item.title + '] - NEXT ITEM (' + index + ' -> ' + (index + 1) + '?)');
-          evalKeepers(sequence, item, options, c);
-          evalSequence(sequence, cb, parseroptions, options, index + 1);
+          if (wo.verbose) console.log('[' + item.title + '] - NEXT ITEM (' + index + ' -> ' + (index + 1) + '?)');
+          _evalKeepers(sequence, item, wo, c);
+          _evalSequence(sequence, cb, po, wo, index + 1);
         }
       });
     });
@@ -512,32 +515,49 @@ const jsonizer = function() {
 
   /**
    * Effettua una catena di chiamate sequenziali
-   * @param sequence                  // sequenza chiamate
+   * @param info                      // sequenza chiamate
    * @param {Function} cb             // cb(err, content)
-   * @param {Object} [parseroptions]  // opzioni per il parser html
-   * @param {Object} [options]        // opzioni chiamata web
+   * @param {Object} [po]             // opzioni per il parser
+   * @param {Object} [wo]             // opzioni chiamata web
    */
-  function evalSequenceStart(sequence, cb, parseroptions, options) {
-    return evalSequence(sequence, cb, parseroptions, options, 0);
+  function evalSequence(info, cb, po, wo) {
+    const pOptions = proto.parserOptions(po);
+    const wOptions = proto.webOptions(wo);
+    const sequence = proto.sequence(info);
+    return _evalSequence(sequence, cb, pOptions, wOptions, 0);
   }
 
   return {
+    constants: CONSTANTS,
     util: {
       ok: function (res, obj) {return res.json(200, obj);},
       created: function (res, obj) {return res.json(201, obj);},
       deleted: function (res) {return res.json(204);},
       notfound: function (res) {return res.send(404);},
       error: function (res, err) {return res.send(500, err);},
-      getkeeper: function (name) {return _.find(_keepers, {'name': name});}
+      getkeeper: function (name) {return _.find(_keepers, {'name': name});},
+      parseUrl: URL.parse
     },
     parser: {
       types: parser.types,
       parse: parser.parse,
       parseHtmlTable: parser.parseHtmlTable,
       parseJsonContent: parser.parseJsonContent,
+      parseXmlContent: parser.parseXmlContent,
       parseCustomContent: parser.parseCustomContent
     },
-    eval: evalSequenceStart
+    /**
+     * esegue la sequenza:
+     *
+     * jsonizer.eval(sequence, callback, parserOptions, webOptions)
+     *
+     * callback: (err, result) => {
+     *   result.type = {string}     >>> type of content (json,xml,html,...)
+     *   result.data = {object}     >>> result object
+     *   result.content = {string}; >>> the original remote content
+     * }
+     */
+    eval: evalSequence
   };
 }.call(this);
 
